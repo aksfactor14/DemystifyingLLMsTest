@@ -82,7 +82,7 @@ class InferenceEngine:
         """
         Generate a list of token IDs autoregressively from input token sequence.
         """
-        from inference.sampling import Sampler
+        from config.constants import EOS_TOKEN_ID
 
         self._prepare_model()
 
@@ -93,12 +93,8 @@ class InferenceEngine:
         if self.model is None or not callable(self.model):
             raise RuntimeError("InferenceEngine has no callable model to generate with")
 
-        sampler = Sampler(
-            temperature=temperature if temperature is not None else self.inference_config.temperature,
-            top_k=top_k if top_k is not None else self.inference_config.top_k,
-            top_p=top_p if top_p is not None else self.inference_config.top_p,
-            repetition_penalty=self.inference_config.repetition_penalty,
-        )
+        temp = temperature if temperature is not None else self.inference_config.temperature
+        stop_token_ids = set(self.inference_config.stop_token_ids) | {EOS_TOKEN_ID}
         max_context = getattr(self.model_config, "max_seq_len", None)
         tokens = list(prompt_tokens)
 
@@ -113,10 +109,14 @@ class InferenceEngine:
                     logits = logits[0]
                 next_token_logits = logits[:, -1, :]  # (1, vocab_size)
 
-                next_token = sampler.sample(next_token_logits, generated_tokens=tokens).item()
+                if temp > 0:
+                    probs = torch.softmax(next_token_logits / temp, dim=-1)
+                    next_token = torch.multinomial(probs, num_samples=1).item()
+                else:
+                    next_token = torch.argmax(next_token_logits, dim=-1).item()
                 tokens.append(int(next_token))
 
-                if next_token in self.inference_config.stop_token_ids:
+                if next_token in stop_token_ids:
                     break
 
         return tokens

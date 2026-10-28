@@ -44,14 +44,14 @@ class RequestHandler:
                 temperature=temperature
             )
             completion_tokens = generated_tokens[len(prompt_tokens):]
-            response_text = self._decode(completion_tokens)
+            response_text = self._decode(generated_tokens)
         elif self.engine is not None and hasattr(self.engine, "generate"):
-            raw_gen = self.engine.generate(prompt, tokenizer=self.tokenizer, max_new_tokens=max_tokens)
-            response_text = raw_gen[len(prompt):] if raw_gen.startswith(prompt) else raw_gen
-            completion_tokens = self._encode(response_text, add_bos=False)
+            response_text = self.engine.generate(prompt, tokenizer=self.tokenizer, max_new_tokens=max_tokens)
+            continuation = response_text[len(prompt):] if response_text.startswith(prompt) else response_text
+            completion_tokens = self._encode(continuation, add_bos=False)
         else:
             completion_tokens = []
-            response_text = ""
+            response_text = self._decode(prompt_tokens)
 
         eos_token_id = getattr(getattr(self.tokenizer, "vocab", None), "eos_token_id", None)
         if eos_token_id is not None and completion_tokens and completion_tokens[-1] == eos_token_id:
