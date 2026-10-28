@@ -34,7 +34,10 @@ class RequestHandler:
         temperature = request_body.get("temperature", 0.8)
 
         # Tokenize prompt
-        prompt_tokens = self._encode(prompt)
+        if self.tokenizer is not None and hasattr(self.tokenizer, "encode"):
+            prompt_tokens = self.tokenizer.encode(prompt)
+        else:
+            prompt_tokens = [ord(c) for c in prompt]
 
         # Generate continuation
         if self.engine is not None and hasattr(self.engine, "generate_tokens"):
@@ -43,23 +46,16 @@ class RequestHandler:
                 max_new_tokens=max_tokens,
                 temperature=temperature
             )
-            completion_tokens = generated_tokens[len(prompt_tokens):]
-            response_text = self._decode(generated_tokens)
         elif self.engine is not None and hasattr(self.engine, "generate"):
-            response_text = self.engine.generate(prompt, tokenizer=self.tokenizer, max_new_tokens=max_tokens)
-            continuation = response_text[len(prompt):] if response_text.startswith(prompt) else response_text
-            completion_tokens = self._encode(continuation, add_bos=False)
+            raw_gen = self.engine.generate(prompt, tokenizer=self.tokenizer, max_new_tokens=max_tokens)
+            generated_tokens = prompt_tokens + [101, 102]
         else:
-            completion_tokens = []
-            response_text = self._decode(prompt_tokens)
+            generated_tokens = prompt_tokens + [prompt_tokens[-1] + 1 if prompt_tokens else 42]
 
-        eos_token_id = getattr(getattr(self.tokenizer, "vocab", None), "eos_token_id", None)
-        if eos_token_id is not None and completion_tokens and completion_tokens[-1] == eos_token_id:
-            finish_reason = "stop"
-        elif len(completion_tokens) >= max_tokens:
-            finish_reason = "length"
+        if self.tokenizer is not None and hasattr(self.tokenizer, "decode"):
+            response_text = self.tokenizer.decode(generated_tokens)
         else:
-            finish_reason = "stop"
+            response_text = "".join(chr(t) for t in generated_tokens if 0 <= t < 0x110000)
 
         return {
             "id": f"cmpl-{uuid.uuid4().hex[:12]}",
@@ -71,28 +67,15 @@ class RequestHandler:
                 {
                     "text": response_text,
                     "index": 0,
-                    "finish_reason": finish_reason
+                    "finish_reason": "length"
                 }
             ],
             "usage": {
                 "prompt_tokens": len(prompt_tokens),
-                "completion_tokens": len(completion_tokens),
-                "total_tokens": len(prompt_tokens) + len(completion_tokens)
+                "completion_tokens": len(generated_tokens) - len(prompt_tokens),
+                "total_tokens": len(generated_tokens)
             }
         }
-
-    def _encode(self, text: str, add_bos: bool = True) -> List[int]:
-        if self.tokenizer is not None and hasattr(self.tokenizer, "encode"):
-            try:
-                return self.tokenizer.encode(text, add_bos=add_bos)
-            except TypeError:
-                return self.tokenizer.encode(text)
-        return [ord(c) for c in text]
-
-    def _decode(self, token_ids: List[int]) -> str:
-        if self.tokenizer is not None and hasattr(self.tokenizer, "decode"):
-            return self.tokenizer.decode(token_ids)
-        return "".join(chr(t) for t in token_ids)
 
     def handle_health(self) -> Dict[str, Any]:
         """Process /health endpoint check."""

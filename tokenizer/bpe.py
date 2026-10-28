@@ -35,14 +35,10 @@ class BPETokenizer:
         if len(pieces) <= 1:
             return pieces
 
-        merge_ranks = {pair: rank for rank, pair in enumerate(self.merges)}
-
-        while len(pieces) > 1:
-            pairs = self._get_stats(pieces)
-            best_pair = min(pairs, key=lambda p: merge_ranks.get(p, float("inf")))
-            if best_pair not in merge_ranks:
+        for pair in self.merges:
+            if len(pieces) <= 1:
                 break
-            pieces = self._merge_word(pieces, best_pair)
+            pieces = self._merge_word(pieces, pair)
 
         return pieces
 
