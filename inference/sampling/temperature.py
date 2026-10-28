@@ -8,5 +8,8 @@ def apply_temperature(logits: torch.Tensor, temperature: float = 1.0) -> torch.T
     Apply temperature scaling to logits.
     """
     if temperature <= 0.0:
-        raise ValueError(f"temperature must be positive, got {temperature}")
-    return logits / temperature
+        greedy = torch.argmax(logits, dim=-1, keepdim=True)
+        return torch.zeros_like(logits).scatter_(-1, greedy, 1.0)
+    scaled = logits / temperature
+    probs = F.softmax(scaled, dim=-1)
+    return probs
