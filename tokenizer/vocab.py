@@ -48,7 +48,7 @@ class Vocabulary:
             self._token_to_id[token] = idx
             self._id_to_token[idx] = token
             return idx
-        return self.add_token(token)
+        return self.unk_token_id
 
     def id_to_token(self, idx: int) -> str:
         if idx in self._id_to_token:
